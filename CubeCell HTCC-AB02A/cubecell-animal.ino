@@ -19,7 +19,8 @@
 #define RX_TIMEOUT_VALUE                            2000      // Tempo que o rádio fica na janela de Rx (ms)
 #define BUFFER_SIZE                                 250       // Número de bytes máximo do pacote
 
-#define TIME_TO_SLEEP 10                  // Tempo que o dispositivo dorme em cada ciclo (Em segundos)
+#define TIME_TO_SLEEP 10                        // Tempo que o dispositivo dorme em cada ciclo (Em segundos)
+#define TIME_TO_SLEEP_LOST 3                    // Tempo que o dispositivo dorme em cada ciclo casos esteja perdido (Em segundos)
 
 #define devEUI "00:00:00:00:00:00:00:02"  // Endereço de identificação do dispositivo
 #define boardName "Cubecell 1/2AA Node"   // Nome da placa utilizada
@@ -40,6 +41,7 @@ static TimerEvent_t wakeUp;
 TinyGPSPlus gps;
 bool isLost = false;
 
+int timeToSleep = TIME_TO_SLEEP;
 String receivedData;
 JSONVar receivedJson;
 int16_t txNumber;
@@ -95,10 +97,14 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr ){
   Radio.Sleep();
   receivedData = String(rxpacket);
   checkRequestReply();
-  if(isLost)
+  if(isLost){
     state = SEND_LOCATION;
-  else
+    timeToSleep = TIME_TO_SLEEP_LOST;
+  }else{
     state = LOWPOWER;
+    timeToSleep = TIME_TO_SLEEP;
+  }
+
   Serial.printf("\r\nreceived packet \"%s\" with Rssi %d , length %d\r\n",rxpacket,Rssi,rxSize);
 }
 
@@ -155,7 +161,7 @@ void sendPacket(char* data){
     
 // Método que coloca o dispositivo a dormir 
 void sleep(){
-  TimerSetValue( &wakeUp, TIME_TO_SLEEP * 1000 );
+  TimerSetValue( &wakeUp, timeToSleep * 1000 );
   TimerStart( &wakeUp );
   lowPowerHandler();
 }
@@ -211,7 +217,7 @@ void loop() {
 
     // Estado do dispositivo que o dispositivo entra em modo sleep
     case LOWPOWER:
-      Serial.println("Sleeping during " + String(TIME_TO_SLEEP) + " seconds");
+      Serial.println("Sleeping during " + String(timeToSleep) + " seconds");
       delay(100);
       sleep();
       break;

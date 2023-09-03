@@ -31,7 +31,8 @@
 #define application "GPS Tracker"  // Nome da aplicação
 
 #define CLOCK_INTERRUPT_PIN 3             // Pino em que SQW do RTC está conectado no qual o alarme vai ser disparado (Pino digital)
-#define TIME_TO_SLEEP 60                  // Tempo que o dispositivo dorme em cada ciclo (Em segundos)
+#define TIME_TO_SLEEP 10                  // Tempo que o dispositivo dorme em cada ciclo (Em segundos)
+#define TIME_TO_SLEEP_LOST 3              // Tempo que o dispositivo dorme em cada ciclo casos esteja perdido (Em segundos)
 #define RX_TIMEOUT 3                      // Tempo que o dispositivo vai estar em modo Rx
 
 #define txSensorPin A0                    // Pino onde o Tx do Sensor está conectado
@@ -47,6 +48,7 @@ typedef enum
 
 States_t state;
 
+int timeToSleep = TIME_TO_SLEEP;
 RTC_DS3231 rtc;
 TinyGPSPlus gps;
 SoftwareSerial gpsSerial(txSensorPin, rxSensorPin);
@@ -288,10 +290,13 @@ void loop() {
         Serial.println("-"+receivedData);
         checkRequestReply();
         // Verifica se o dispositivo está perdido
-        if(isLost)
-          state = SEND_LOCATION;
-        else
-          state = LOWPOWER;
+        if(isLost){
+           timeToSleep = TIME_TO_SLEEP_LOST;
+           state = SEND_LOCATION;
+        }else{
+           timeToSleep = TIME_TO_SLEEP;
+           state = LOWPOWER;
+        }
       }else{
         Serial.println("RX Timeout");
         state = LOWPOWER;
@@ -300,9 +305,9 @@ void loop() {
 
     // Estado do dispositivo que o dispositivo entra em modo sleep
     case LOWPOWER:
-      Serial.println("Going to sleep for " + String(TIME_TO_SLEEP/60) + " minutes");
+      Serial.println("Going to sleep for " + String(timeToSleep/60) + " minutes");
       gpsSerial.end();  // Desliga a comunicação serial com o módulo GPS (Senão o dispostivo não entra em modo low power)
-      setAlarm(TIME_TO_SLEEP);  // Programa o alarme para acordar o dispositivo
+      setAlarm(timeToSleep);  // Programa o alarme para acordar o dispositivo
       attachInterrupt(digitalPinToInterrupt(CLOCK_INTERRUPT_PIN), wakeUp, LOW); // Ativa a interrupção para quando o alarme disparar
       delay(100);
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);  // Coloca o dispositivo a dormir

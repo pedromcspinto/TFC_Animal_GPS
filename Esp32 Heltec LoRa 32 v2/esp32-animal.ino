@@ -24,6 +24,7 @@
 #define application "GPS Tracker"         // Nome da aplicação
 
 #define TIME_TO_SLEEP 10                  // Tempo que o dispositivo dorme em cada ciclo (Em segundos)
+#define TIME_TO_SLEEP_LOST 3              // Tempo que o dispositivo dorme em cada ciclo casos esteja perdido (Em segundos)
 #define RX_TIMEOUT 3                      // Tempo que o dispositivo vai estar em modo Rx
 
 #define txSensorPin 37                    // Pino onde o Tx do Sensor está conectado
@@ -46,6 +47,7 @@ int rxTime;
 int16_t txNumber;
 int16_t Rssi,rxSize;
 
+RTC_DATA_ATTR int timeToSleep;
 String receivedData;
 JSONVar receivedJson;
 TinyGPSPlus gps;
@@ -119,7 +121,7 @@ void sendPacket(String data){
 
 // Método que mete o dispositivo a dormir    
 void sleep(){
-  Serial.println("Sleeping during " + String(TIME_TO_SLEEP) + " seconds");
+  Serial.println("Sleeping during " + String(timeToSleep) + " seconds");
   esp_deep_sleep_start();
 }
 
@@ -138,7 +140,6 @@ void setup() {
   Serial.begin(115200);                                 // Inicialização da comunicação Serial
   gpsSerial.begin(9600);                                // Inicialização da comunicação Serial com o GPS
   initLoRa();                                           // Inicialização do rádio LoRa
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Iniciaçizar o timer para acordar o dispositivo
   
   state = SEND_REQUEST;                                 
 }
@@ -187,10 +188,14 @@ void loop() {
         Serial.println("-"+receivedData);
         checkRequestReply();
         // Verifica se o dispositivo está perdido
-        if(isLost)
-          state = SEND_LOCATION;
-        else
-          state = LOWPOWER;
+        if(isLost){
+           timeToSleep = TIME_TO_SLEEP_LOST;
+           state = SEND_LOCATION;
+        }else{
+           timeToSleep = TIME_TO_SLEEP;
+           state = LOWPOWER;
+        }
+
       }else{
         Serial.println("RX Timeout");
         state = LOWPOWER;
@@ -199,11 +204,14 @@ void loop() {
 
     // Estado do dispositivo que o dispositivo entra em modo sleep
     case LOWPOWER:
+        if(timeToSleep==0)
+            timeToSleep=TIME_TO_SLEEP;
+        esp_sleep_enable_timer_wakeup(timeToSleep*1000000); // Inicializar o timer para acordar o dispositivo
         sleep();
-      break;
+        break;
     default:
-      state = LOWPOWER; 
-      break; 
+        state = LOWPOWER;
+        break;
   }
   delay(200);
 }
